@@ -62,6 +62,16 @@
   .scale div{flex:1}
   .scalelbl{display:flex;justify-content:space-between;font-size:10px;color:var(--mute);margin-top:2px}
   .rel{margin-top:8px;font-size:13px;color:var(--ink)}
+  .row{display:flex;gap:8px;align-items:center}
+  input[type=text],input[type=number]{flex:1;min-width:0;font-size:16px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff}
+  button.sm{min-height:46px;padding:10px 14px;white-space:nowrap}
+  .routes{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+  .ritem{display:flex;align-items:center;gap:6px;background:var(--bg);border-radius:10px;padding:4px 4px 4px 12px}
+  .ritem .nm{flex:1;min-width:0;text-align:left;background:none;border:0;padding:4px 0;min-height:44px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ritem .nm small{display:block;font-weight:400;color:var(--mute);font-size:12px}
+  .ritem button.ic{min-height:44px;width:44px;padding:0;border-color:transparent;background:transparent}
+  .steps{font-size:12px;color:var(--mute);line-height:1.5;margin-top:8px}
+  #wind{position:absolute;left:0;top:0;width:100%;height:100%;z-index:450;pointer-events:none;transition:opacity .25s}
   /* map bits */
   .pin{width:34px;height:34px;border-radius:50%;background:var(--accent);color:#fff;font-weight:700;font-size:15px;
     display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.4)}
@@ -107,7 +117,17 @@
       <button id="bLoc">📍 Locatie</button>
       <button id="bLoop" aria-pressed="false">🔁 Rondje</button>
       <button id="bSnap" class="on" aria-pressed="true">🛣 Volg paden</button>
-      <button id="bGpx" class="primary">⬇︎ GPX</button>
+      <button id="bFit">⤢ Centreer</button>
+    </div>
+
+    <div class="card">
+      <div class="sec"><h2>Afstand-doel</h2></div>
+      <div class="row">
+        <input type="number" id="goal" inputmode="decimal" step="0.5" min="1" max="60" value="10" aria-label="Doelafstand in km">
+        <span style="font-weight:600">km</span>
+        <button class="sm primary" id="bGoal">🎯 Maak rondje</button>
+      </div>
+      <div class="hint" id="goalHint">Start = je eerste punt, anders je locatie of het midden van de kaart. Tik nogmaals voor een andere variant.</div>
     </div>
 
     <div class="card">
@@ -120,7 +140,7 @@
 
     <div class="card">
       <div class="sec"><h2>Wind</h2>
-        <div><select id="hour" aria-label="Tijdstip"></select></div>
+        <div class="row"><button class="sm on" id="bWind" aria-pressed="true" style="min-height:40px;padding:6px 12px">Stromen</button><select id="hour" aria-label="Tijdstip"></select></div>
       </div>
       <div class="windrow">
         <svg id="compass" width="96" height="96" viewBox="0 0 96 96"></svg>
@@ -129,8 +149,26 @@
       <div class="rel" id="windRel"></div>
       <div class="scale" id="scale"></div>
       <div class="scalelbl"><span>0</span><span>12</span><span>20</span><span>29</span><span>39</span><span>50+ km/u</span></div>
-      <div class="hint">Pijlen op de kaart wijzen de kant op waarheen de wind waait. Het getal is km/u.</div>
+      <div class="hint">De streepjes op de kaart stromen mee met de wind: sneller en donkerder/warmer van kleur = harder.</div>
     </div>
+    <div class="card">
+      <div class="sec"><h2>Delen · Garmin</h2></div>
+      <div class="btns" style="grid-template-columns:1fr 1fr">
+        <button class="primary" id="bShare">⌚ Deel naar Garmin</button>
+        <button id="bGpx">⬇︎ GPX downloaden</button>
+      </div>
+      <div class="steps">Garmin laat geen directe push vanuit een webapp toe. Kies in het deelmenu <b>Garmin Connect</b> (als die verschijnt) of bewaar het bestand en importeer het via connect.garmin.com → Trainen → Routes → Importeren. Synchroniseer daarna je horloge, dan staat de route onder Routes.</div>
+    </div>
+
+    <div class="card">
+      <div class="sec"><h2>Mijn routes</h2></div>
+      <div class="row">
+        <input type="text" id="rname" placeholder="Naam van de route" maxlength="60" aria-label="Routenaam">
+        <button class="sm primary" id="bSave">💾 Opslaan</button>
+      </div>
+      <div class="routes" id="rlist"></div>
+    </div>
+
     <div class="hint" style="text-align:center">Kaartdata © OpenStreetMap · hoogte en wind via Open-Meteo</div>
   </aside>
   <div id="map"></div>
@@ -159,7 +197,7 @@ const CARD = ['N', 'NO', 'O', 'ZO', 'Z', 'ZW', 'W', 'NW'];
 const cardinal = d => CARD[Math.round(d / 45) % 8];
 const BFT = [1, 6, 12, 20, 29, 39, 50, 62, 75, 89, 103, 118];
 const beaufort = k => { let i = 0; while (i < BFT.length && k >= BFT[i]) i++; return i; };
-const WCOL = [[0, '#4cc9a4'], [12, '#a6d854'], [20, '#ffd92f'], [29, '#fc8d3c'], [39, '#e5383b'], [50, '#9b2fae']];
+const WCOL = [[0, '#2f7fc1'], [12, '#12a58c'], [20, '#c79a00'], [29, '#ee7a1a'], [39, '#d62839'], [50, '#8e2bb0']];
 const windColor = k => { let c = WCOL[0][1]; for (const [t, col] of WCOL) if (k >= t) c = col; return c; };
 let toastT;
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 3500); }
@@ -175,12 +213,10 @@ const topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {ma
 const map = L.map('map', {zoomControl: false, layers: [osm]}).setView([52.09, 5.12], 13);
 L.control.zoom({position: 'topright'}).addTo(map);
 L.control.layers({'Kaart': osm, 'Hoogtelijnen (topo)': topo}, null, {position: 'topright', collapsed: true}).addTo(map);
-map.createPane('windPane'); map.getPane('windPane').style.zIndex = 450; map.getPane('windPane').style.pointerEvents = 'none';
 const routeLayer = L.layerGroup().addTo(map);
 const kmLayer = L.layerGroup().addTo(map);
-const windLayer = L.layerGroup().addTo(map);
 const cursor = L.circleMarker([0, 0], {radius: 8, color: '#fff', weight: 3, fillColor: '#14181f', fillOpacity: 1, interactive: false});
-new ResizeObserver(() => map.invalidateSize()).observe($('#map'));
+new ResizeObserver(() => { map.invalidateSize(); sizeCanvas(); }).observe($('#map'));
 
 /* ---------- state ---------- */
 let points = [];        // [lat,lng] waypoints
@@ -343,24 +379,24 @@ function drawProfile() {
   svg.addEventListener('pointerup', () => setTimeout(() => cursor.remove(), 1500));
 })();
 
-/* ---------- wind ---------- */
-let wind = null, lastWind = null;   // wind = {grid:[{lat,lng,sp[],dir[],gust[]}], times:[]}
-let hourIdx = 0;
+/* ---------- wind (stromende streepjes) ---------- */
+let wind = null, lastWind = null, hourIdx = 0, windOn = true, moving = false;
+const COLS = 8, ROWS = 6, CELL = 20, PXS = 5;
 function windScale() { $('#scale').innerHTML = WCOL.map(([, c]) => `<div style="background:${c}"></div>`).join(''); }
 async function loadWind() {
-  const b = map.getBounds(), cols = 5, rows = 4;
-  const c = map.getCenter();
-  if (lastWind && Math.abs(lastWind.lat - c.lat) < lastWind.h * .2 && Math.abs(lastWind.lng - c.lng) < lastWind.w * .2 && Math.abs(lastWind.z - map.getZoom()) < 1 && wind) return;
+  const b = map.getBounds(), c = map.getCenter();
+  if (lastWind && wind && Math.abs(lastWind.lat - c.lat) < lastWind.h * .2 && Math.abs(lastWind.lng - c.lng) < lastWind.w * .2 && Math.abs(lastWind.z - map.getZoom()) < 1) return;
   const h = b.getNorth() - b.getSouth(), w = b.getEast() - b.getWest();
   const lats = [], lngs = [];
-  for (let r = 0; r < rows; r++) for (let q = 0; q < cols; q++) {
-    lats.push((b.getNorth() - (r + .5) * h / rows).toFixed(3));
-    lngs.push((b.getWest() + (q + .5) * w / cols).toFixed(3));
+  for (let r = 0; r < ROWS; r++) for (let q = 0; q < COLS; q++) {
+    lats.push(+(b.getNorth() - (r + .5) * h / ROWS).toFixed(3));
+    lngs.push(+(b.getWest() + (q + .5) * w / COLS).toFixed(3));
   }
   try {
     const d = await getJSON(`https://api.open-meteo.com/v1/forecast?latitude=${lats.join(',')}&longitude=${lngs.join(',')}&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m&wind_speed_unit=kmh&forecast_hours=24&timezone=auto`);
     const arr = Array.isArray(d) ? d : [d];
-    wind = {times: arr[0].hourly.time, grid: arr.map((o, i) => ({lat: +lats[i], lng: +lngs[i], sp: o.hourly.wind_speed_10m, dir: o.hourly.wind_direction_10m, gust: o.hourly.wind_gusts_10m}))};
+    wind = {times: arr[0].hourly.time, meta: {north: b.getNorth(), west: b.getWest(), dlat: h / ROWS, dlng: w / COLS},
+      grid: arr.map((o, i) => ({lat: lats[i], lng: lngs[i], sp: o.hourly.wind_speed_10m, dir: o.hourly.wind_direction_10m, gust: o.hourly.wind_gusts_10m}))};
     lastWind = {lat: c.lat, lng: c.lng, h, w, z: map.getZoom()};
     buildHours(); renderWind();
   } catch (e) { $('#windTxt').textContent = 'Winddata niet beschikbaar.'; }
@@ -378,13 +414,67 @@ function meanWind() {
   const n = wind.grid.length; u /= n; v /= n; g /= n;
   return {sp: Math.hypot(u, v), from: (Math.atan2(-u, -v) * 180 / Math.PI + 360) % 360, gust: g};
 }
-function renderWind() {
-  windLayer.clearLayers();
-  for (const p of wind.grid) {
-    const s = p.sp[hourIdx], rot = (p.dir[hourIdx] + 180) % 360, size = Math.round(18 + Math.min(s, 50) * .7), col = windColor(s);
-    const html = `<div class="wa"><svg width="${size}" height="${size}" viewBox="0 0 24 24" style="transform:rotate(${rot}deg)"><path d="M12 1 L20 21 L12 16.5 L4 21 Z" fill="${col}" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg><span>${Math.round(s)}</span></div>`;
-    L.marker([p.lat, p.lng], {pane: 'windPane', interactive: false, keyboard: false, icon: L.divIcon({className: '', html, iconSize: [64, 64], iconAnchor: [32, 32]})}).addTo(windLayer);
+/* screen-space vector field (km/h per axis), rebuilt after each move or hour change */
+let fieldW = 0, fieldH = 0, fu = new Float32Array(1), fv = new Float32Array(1), su = 0, sv = 0;
+function buildField() {
+  const W = $('#map').clientWidth, H = $('#map').clientHeight;
+  fieldW = Math.ceil(W / CELL) + 2; fieldH = Math.ceil(H / CELL) + 2;
+  fu = new Float32Array(fieldW * fieldH); fv = new Float32Array(fieldW * fieldH);
+  if (!wind) return;
+  const g = wind.meta;
+  const U = wind.grid.map(p => { const s = p.sp[hourIdx], d = rad(p.dir[hourIdx]); return [-s * Math.sin(d), -s * Math.cos(d)]; });
+  for (let j = 0; j < fieldH; j++) for (let i = 0; i < fieldW; i++) {
+    const ll = map.containerPointToLatLng([i * CELL, j * CELL]);
+    const fr = clamp((g.north - ll.lat) / g.dlat - .5, 0, ROWS - 1), fc = clamp((ll.lng - g.west) / g.dlng - .5, 0, COLS - 1);
+    const r0 = Math.min(Math.floor(fr), ROWS - 2), c0 = Math.min(Math.floor(fc), COLS - 2), tr = fr - r0, tc = fc - c0;
+    const mix = k => (U[r0 * COLS + c0][k] * (1 - tc) + U[r0 * COLS + c0 + 1][k] * tc) * (1 - tr) + (U[(r0 + 1) * COLS + c0][k] * (1 - tc) + U[(r0 + 1) * COLS + c0 + 1][k] * tc) * tr;
+    fu[j * fieldW + i] = mix(0);        // oost → rechts
+    fv[j * fieldW + i] = -mix(1);       // noord → omhoog (scherm-y wijst omlaag)
   }
+}
+function sampleField(x, y) {
+  const gx = clamp(x / CELL, 0, fieldW - 1.001), gy = clamp(y / CELL, 0, fieldH - 1.001);
+  const i = Math.floor(gx), j = Math.floor(gy), tx = gx - i, ty = gy - j, k = j * fieldW + i;
+  su = (fu[k] * (1 - tx) + fu[k + 1] * tx) * (1 - ty) + (fu[k + fieldW] * (1 - tx) + fu[k + fieldW + 1] * tx) * ty;
+  sv = (fv[k] * (1 - tx) + fv[k + 1] * tx) * (1 - ty) + (fv[k + fieldW] * (1 - tx) + fv[k + fieldW + 1] * tx) * ty;
+}
+const cv = document.createElement('canvas'); cv.id = 'wind'; map.getContainer().appendChild(cv);
+const ctx = cv.getContext('2d');
+let cw = 0, ch = 0, parts = [], lastT = 0;
+const seed = (p, fresh) => { p.x = Math.random() * cw; p.y = Math.random() * ch; p.age = fresh ? Math.random() * 90 : 0; p.life = 50 + Math.random() * 80; return p; };
+function sizeCanvas() {
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  cw = $('#map').clientWidth; ch = $('#map').clientHeight;
+  cv.width = Math.max(1, cw * dpr); cv.height = Math.max(1, ch * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const n = clamp(Math.round(cw * ch / 450), 400, 3000);
+  parts = Array.from({length: n}, () => seed({}, true));
+  buildField();
+}
+function frame(t) {
+  requestAnimationFrame(frame);
+  if (t - lastT < 15) return;                     // max ±60 fps, houdt de fade stabiel
+  const dt = Math.min(.05, (t - lastT) / 1000); lastT = t;
+  if (!windOn || !wind || moving || document.hidden) return;
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.fillStyle = 'rgba(0,0,0,.08)'; ctx.fillRect(0, 0, cw, ch);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.lineWidth = 1.1; ctx.lineCap = 'round';
+  const k = PXS * dt;
+  for (const p of parts) {
+    sampleField(p.x, p.y);
+    const nx = p.x + su * k, ny = p.y + sv * k;
+    p.age += 1;
+    if (p.age > p.life || nx < 0 || ny < 0 || nx > cw || ny > ch) { seed(p, false); continue; }
+    ctx.strokeStyle = windColor(Math.hypot(su, sv));
+    ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(nx, ny); ctx.stroke();
+    p.x = nx; p.y = ny;
+  }
+}
+map.on('movestart zoomstart', () => { moving = true; cv.style.opacity = 0; });
+map.on('moveend zoomend', () => { ctx.clearRect(0, 0, cw, ch); buildField(); parts.forEach(p => seed(p, true)); moving = false; cv.style.opacity = 1; });
+$('#bWind').onclick = () => { windOn = !windOn; setToggle($('#bWind'), windOn); cv.style.display = windOn ? 'block' : 'none'; ctx.clearRect(0, 0, cw, ch); };
+function renderWind() {
   const m = meanWind(), rot = (m.from + 180) % 360, col = windColor(m.sp);
   $('#compass').innerHTML =
     `<circle cx="48" cy="48" r="44" fill="#f5f6f8" stroke="#d5d9e0" stroke-width="2"/>` +
@@ -394,6 +484,7 @@ function renderWind() {
     `<text x="9" y="52" font-size="10" text-anchor="middle" fill="#6b7280">W</text>` +
     `<g transform="rotate(${rot} 48 48)"><path d="M48 20 L60 72 L48 63 L36 72 Z" fill="${col}" stroke="#14181f" stroke-width="1.5" stroke-linejoin="round"/></g>`;
   $('#windTxt').innerHTML = `<b>${Math.round(m.sp)} km/u</b> · Bft ${beaufort(m.sp)}<br>uit ${cardinal(m.from)} (${Math.round(m.from)}°) · vlagen ${Math.round(m.gust)} km/u`;
+  buildField(); ctx.clearRect(0, 0, cw, ch);
   updateWindRel();
 }
 function updateWindRel() {
@@ -416,15 +507,103 @@ $('#bLoc').onclick = () => { map.locate({setView: true, maxZoom: 15, enableHighA
 let me;
 map.on('locationfound', e => { if (me) me.remove(); me = L.circleMarker(e.latlng, {radius: 8, color: '#fff', weight: 3, fillColor: '#1f6feb', fillOpacity: 1, interactive: false}).addTo(map); });
 map.on('locationerror', () => toast('Locatie niet beschikbaar – geef Safari toegang tot je locatie.'));
-$('#bGpx').onclick = () => {
-  if (R.length < 2) { toast('Maak eerst een route.'); return; }
-  const pts = E.length ? S : R.map(p => p);
+/* ---------- gpx / delen ---------- */
+let curName = '';
+const esc = t => t.replace(/[<>&"]/g, c => ({'<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;'}[c]));
+const routeName = () => $('#rname').value.trim() || curName || `Looproute ${nf(totalM / 1000, 2)} km`;
+function buildGpx() {
+  const pts = E.length ? S : R, name = routeName();
   const trk = pts.map((p, i) => `<trkpt lat="${p[0].toFixed(6)}" lon="${p[1].toFixed(6)}">${E.length ? `<ele>${E[i].toFixed(1)}</ele>` : ''}</trkpt>`).join('');
-  const gpx = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="Looproute planner" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>Looproute ${nf(totalM / 1000, 2)} km</name><trkseg>${trk}</trkseg></trk></gpx>`;
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([gpx], {type: 'application/gpx+xml'}));
-  a.download = `looproute-${nf(totalM / 1000, 2).replace(',', '-')}km.gpx`;
-  document.body.appendChild(a); a.click(); a.remove();
+  const xml = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="Looproute planner" xmlns="http://www.topografix.com/GPX/1/1"><wpt lat="${pts[0][0].toFixed(6)}" lon="${pts[0][1].toFixed(6)}"><name>Start</name></wpt><trk><name>${esc(name)}</name><trkseg>${trk}</trkseg></trk></gpx>`;
+  const fn = (name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'looproute') + '.gpx';
+  return {xml, fn};
+}
+function downloadGpx() {
+  if (R.length < 2) { toast('Maak eerst een route.'); return false; }
+  const g = buildGpx(), a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([g.xml], {type: 'application/gpx+xml'})); a.download = g.fn;
+  document.body.appendChild(a); a.click(); a.remove(); return true;
+}
+$('#bGpx').onclick = downloadGpx;
+$('#bShare').onclick = async () => {
+  if (R.length < 2) { toast('Maak eerst een route.'); return; }
+  const g = buildGpx();
+  try {
+    const file = new File([g.xml], g.fn, {type: 'application/gpx+xml'});
+    if (navigator.canShare && navigator.canShare({files: [file]})) { await navigator.share({files: [file], title: routeName()}); return; }
+  } catch (e) { if (e && e.name === 'AbortError') return; }
+  if (downloadGpx()) toast('GPX gedownload – importeer in Garmin Connect (zie stappen)');
+};
+$('#bFit').onclick = () => { const pts = R.length ? R : points; if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(.15)); };
+
+/* ---------- routebibliotheek ---------- */
+let lib = [];
+function loadLib() { try { lib = JSON.parse(localStorage.getItem('looproute.routes.v1') || '[]'); } catch (e) { lib = []; } }
+function saveLib() { try { localStorage.setItem('looproute.routes.v1', JSON.stringify(lib)); } catch (e) { toast('Opslaan in de browser mislukt'); } }
+function openRoute(r) {
+  points = r.points.map(p => [p[0], p[1]]); loop = !!r.loop; snap = r.snap !== false;
+  setToggle($('#bLoop'), loop); setToggle($('#bSnap'), snap);
+  curName = r.name; $('#rname').value = r.name;
+  rebuildMarkers(); update(); map.fitBounds(L.latLngBounds(points).pad(.3));
+}
+function renderLib() {
+  const box = $('#rlist'); box.innerHTML = '';
+  if (!lib.length) { box.innerHTML = '<div class="hint">Nog geen opgeslagen routes.</div>'; return; }
+  for (const r of lib) {
+    const d = document.createElement('div'); d.className = 'ritem';
+    const nm = document.createElement('button'); nm.className = 'nm';
+    nm.appendChild(document.createTextNode(r.name));
+    const sm = document.createElement('small'); sm.textContent = `${nf(r.m / 1000, 2)} km · ${new Date(r.ts).toLocaleDateString('nl-NL')}`; nm.appendChild(sm);
+    nm.onclick = () => openRoute(r);
+    const ed = document.createElement('button'); ed.className = 'ic'; ed.textContent = '✏️'; ed.setAttribute('aria-label', 'Hernoem');
+    ed.onclick = () => { const n = prompt('Nieuwe naam:', r.name); if (n && n.trim()) { r.name = n.trim().slice(0, 60); saveLib(); renderLib(); } };
+    const del = document.createElement('button'); del.className = 'ic'; del.textContent = '🗑'; del.setAttribute('aria-label', 'Verwijder');
+    del.onclick = () => { if (confirm(`“${r.name}” verwijderen?`)) { lib = lib.filter(x => x !== r); saveLib(); renderLib(); } };
+    d.append(nm, ed, del); box.appendChild(d);
+  }
+}
+$('#bSave').onclick = () => {
+  if (points.length < 2) { toast('Maak eerst een route met minstens 2 punten.'); return; }
+  const name = ($('#rname').value.trim() || `Route ${nf(totalM / 1000, 2)} km`).slice(0, 60);
+  lib.unshift({id: Date.now().toString(36), name, points: points.map(p => [+p[0].toFixed(6), +p[1].toFixed(6)]), loop, snap, m: totalM, ts: Date.now()});
+  curName = name; saveLib(); renderLib(); toast(`“${name}” opgeslagen`);
+};
+
+/* ---------- afstand-doel ---------- */
+const pathLen = cs => { let t = 0; for (let i = 1; i < cs.length; i++) t += hav(cs[i - 1], cs[i]); return t; };
+function dest(p, brg, d) { const b = rad(brg); return [p[0] + d * Math.cos(b) / 111320, p[1] + d * Math.sin(b) / (111320 * Math.cos(rad(p[0])))]; }
+function loopWaypoints(start, theta, r) {      // start + 4 punten op een cirkel die door start loopt
+  const O = dest(start, theta, r), phi0 = theta + 180, wps = [start];
+  for (let k = 1; k <= 4; k++) wps.push(dest(O, phi0 + 72 * k, r));
+  return wps;
+}
+$('#bGoal').onclick = async () => {
+  const target = parseFloat($('#goal').value.replace(',', '.')) * 1000;
+  if (!(target >= 500 && target <= 100000)) { toast('Vul een afstand tussen 0,5 en 100 km in.'); return; }
+  const c = map.getCenter();
+  const start = points[0] ? [points[0][0], points[0][1]] : (me ? [me.getLatLng().lat, me.getLatLng().lng] : [c.lat, c.lng]);
+  const btn = $('#bGoal'); btn.disabled = true; btn.textContent = 'Bezig…';
+  const theta = Math.random() * 360;
+  let r = target / (2 * Math.PI) / 1.35, best = null, ok = true;
+  try {
+    for (let it = 0; it < 4; it++) {
+      const wps = loopWaypoints(start, theta, r), d = pathLen(await fetchRoute([...wps, start]));
+      if (!best || Math.abs(d - target) < Math.abs(best.d - target)) best = {wps, d};
+      if (Math.abs(d - target) / target < .04) break;
+      r *= target / d;
+    }
+  } catch (e) {
+    ok = false; best = {wps: loopWaypoints(start, theta, target / 5.878)};
+    toast('Padroutering niet bereikbaar – rondje met rechte lijnen');
+  }
+  btn.disabled = false; btn.textContent = '🎯 Maak rondje';
+  points = best.wps; loop = true; snap = ok;
+  setToggle($('#bLoop'), true); setToggle($('#bSnap'), snap);
+  curName = ''; $('#rname').value = '';
+  rebuildMarkers(); await update();
+  map.fitBounds(L.latLngBounds(R.length ? R : points).pad(.15));
+  const diff = totalM - target;
+  $('#goalHint').textContent = `Doel ${nf(target / 1000, 2)} km → route ${nf(totalM / 1000, 2)} km (${diff >= 0 ? '+' : '−'}${nf(Math.abs(diff) / 1000, 2)} km). Sleep punten om bij te sturen.`;
 };
 $('#searchForm').addEventListener('submit', async e => {
   e.preventDefault();
@@ -438,11 +617,13 @@ $('#searchForm').addEventListener('submit', async e => {
 
 /* ---------- init ---------- */
 windScale();
+loadLib(); renderLib();
 const had = load();
 setToggle($('#bLoop'), loop); setToggle($('#bSnap'), snap);
 rebuildMarkers();
 if (points.length) { update(); if (points.length > 1) map.fitBounds(L.latLngBounds(points).pad(.3)); }
 if (!had && 'geolocation' in navigator) map.locate({setView: true, maxZoom: 14});
+sizeCanvas(); requestAnimationFrame(frame);
 loadWind();
 </script>
 </body>
